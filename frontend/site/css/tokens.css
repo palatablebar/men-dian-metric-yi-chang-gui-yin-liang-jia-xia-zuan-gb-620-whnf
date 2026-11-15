@@ -1,0 +1,53 @@
+/* 设计令牌：酒店夜班交接本。
+   方向：深棕墨迹 + 暖金批注 + 米色交接纸；衬线数字；手写体用于值班批注。
+   规则：oklch() 色板、禁用纯黑纯白、双字体（display + body）、模块化字号。 */
+:root {
+  /* 纸张：夜审交接单的米色纸与复写纸层次 */
+  --paper: oklch(0.945 0.018 84);
+  --paper-2: oklch(0.915 0.024 82);
+  --paper-3: oklch(0.878 0.03 80);
+  --paper-4: oklch(0.83 0.034 78);
+
+  /* 墨色：深棕（夜间值班台） */
+  --ink: oklch(0.265 0.038 52);
+  --ink-soft: oklch(0.4 0.034 52);
+  --ink-faint: oklch(0.56 0.028 56);
+  --rule: oklch(0.82 0.026 76);
+  --rule-strong: oklch(0.68 0.036 72);
+
+  /* 夜班台面（侧栏/登录左栏） */
+  --night: oklch(0.285 0.03 50);
+  --night-2: oklch(0.235 0.028 48);
+  --night-ink: oklch(0.93 0.02 84);
+
+  /* 暖金：批注与强调 */
+  --accent: oklch(0.655 0.125 72);
+  --accent-soft: oklch(0.75 0.095 78);
+  --accent-wash: oklch(0.93 0.045 82);
+  --ok: oklch(0.5 0.075 148);
+  --ok-wash: oklch(0.93 0.028 150);
+  --warn: oklch(0.68 0.115 74);
+  --warn-wash: oklch(0.94 0.035 80);
+  --danger: oklch(0.495 0.145 27);
+  --danger-wash: oklch(0.925 0.04 28);
+  --info: oklch(0.5 0.06 232);
+  --info-wash: oklch(0.93 0.024 232);
+
+  --font-display: 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+  --font-body: 'Spectral', 'Noto Serif SC', 'Songti SC', serif;
+  --font-mono: 'Spectral', 'Iowan Old Style', 'Songti SC', serif;
+  --font-hand: 'Ma Shan Zheng', 'Kaiti SC', 'STKaiti', cursive;
+
+  --fs-xs: 0.72rem;
+  --fs-sm: 0.82rem;
+  --fs-md: 0.94rem;
+  --fs-lg: 1.18rem;
+  --fs-xl: clamp(1.5rem, 2.1vw, 2.1rem);
+  --fs-2xl: clamp(2rem, 3.3vw, 3.1rem);
+
+  --pad: clamp(14px, 1.6vw, 28px);
+  --rail: 232px;
+  --radius: 2px;
+  --shadow: 0 1px 0 oklch(0.86 0.03 78), 0 22px 44px -38px oklch(0.3 0.04 50 / 0.65);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
