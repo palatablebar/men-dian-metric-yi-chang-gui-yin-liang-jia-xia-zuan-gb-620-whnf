@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models import Base
@@ -25,6 +25,11 @@ class Report(Base):
     impact_total: Mapped[float] = mapped_column(Float, default=0.0)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    calendar_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    invalidated: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    invalidated_reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    invalidated_by_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    superseded_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     seed_key: Mapped[str | None] = mapped_column(String(120), unique=True, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

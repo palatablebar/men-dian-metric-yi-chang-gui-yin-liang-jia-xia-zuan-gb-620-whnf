@@ -141,3 +141,68 @@ CREATE TABLE audit_logs (
   seed_key     VARCHAR(120) UNIQUE,
   created_at   DATETIME NOT NULL
 );
+
+-- ---- 运营日历（特殊日不进常态基线）----
+CREATE TABLE operating_calendar (
+  id                BIGINT PRIMARY KEY AUTO_INCREMENT,
+  store_id          BIGINT NOT NULL,
+  day_type          VARCHAR(20) NOT NULL,          -- promo / renovating / closed
+  start_date        DATE NOT NULL,
+  end_date          DATE NOT NULL,
+  label             VARCHAR(120) NOT NULL DEFAULT '',
+  note              TEXT,
+  active            BOOLEAN NOT NULL DEFAULT TRUE,
+  calendar_version  INT NOT NULL DEFAULT 0,
+  created_by        VARCHAR(160) NOT NULL DEFAULT '',
+  seed_key          VARCHAR(120) UNIQUE,
+  created_at        DATETIME NOT NULL,
+  updated_at        DATETIME NOT NULL,
+  CONSTRAINT uq_calendar_store_type_span UNIQUE (store_id, day_type, start_date, end_date),
+  CONSTRAINT fk_calendar_store FOREIGN KEY (store_id) REFERENCES stores(id) ON DELETE CASCADE
+);
+
+CREATE TABLE calendar_revisions (
+  id           BIGINT PRIMARY KEY AUTO_INCREMENT,
+  version      INT NOT NULL UNIQUE,
+  action       VARCHAR(20) NOT NULL,
+  actor_email  VARCHAR(160) NOT NULL DEFAULT '',
+  summary      VARCHAR(200) NOT NULL DEFAULT '',
+  scope        JSON,
+  seed_key     VARCHAR(120) UNIQUE,
+  created_at   DATETIME NOT NULL
+);
+
+CREATE TABLE generation_jobs (
+  id                BIGINT PRIMARY KEY AUTO_INCREMENT,
+  job_no            VARCHAR(48) NOT NULL UNIQUE,
+  kind              VARCHAR(20) NOT NULL DEFAULT 'recompute',
+  calendar_version  INT NOT NULL DEFAULT 0,
+  status            VARCHAR(20) NOT NULL DEFAULT 'running',
+  stage             VARCHAR(20) NOT NULL DEFAULT 'staged',
+  payload           JSON,
+  staging           JSON,
+  progress          JSON,
+  recovered_from    INT NULL,
+  idempotent_hit    BOOLEAN NOT NULL DEFAULT FALSE,
+  log_text          TEXT,
+  created_at        DATETIME NOT NULL,
+  updated_at        DATETIME NOT NULL
+);
+
+-- 已有表的增量列（新库由 SQLAlchemy 直接建全；旧库由启动时轻量补列）
+ALTER TABLE runs ADD COLUMN calendar_version INT NOT NULL DEFAULT 0;
+ALTER TABLE anomalies
+  ADD COLUMN calendar_version INT NOT NULL DEFAULT 0,
+  ADD COLUMN invalidated BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN invalidated_reason VARCHAR(60) NULL,
+  ADD COLUMN invalidated_by_version INT NULL;
+ALTER TABLE attributions
+  ADD COLUMN calendar_version INT NOT NULL DEFAULT 0,
+  ADD COLUMN sample_key VARCHAR(64) NOT NULL DEFAULT '',
+  ADD COLUMN updated_at DATETIME NULL;
+ALTER TABLE reports
+  ADD COLUMN calendar_version INT NOT NULL DEFAULT 0,
+  ADD COLUMN invalidated BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN invalidated_reason VARCHAR(60) NULL,
+  ADD COLUMN invalidated_by_version INT NULL,
+  ADD COLUMN superseded_by INT NULL;

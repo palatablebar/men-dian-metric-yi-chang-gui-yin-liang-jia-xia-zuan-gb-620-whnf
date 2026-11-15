@@ -21,10 +21,11 @@ export const BRAND = {
 export const NAV = [
   { to: '#/overview', no: '01', label: '总览', permission: 'overview:read' },
   { to: '#/stores', no: '02', label: '门店与指标', permission: 'store:read' },
-  { to: '#/anomalies', no: '03', label: '异常清单', permission: 'anomaly:read' },
-  { to: '#/attribution', no: '04', label: '归因下钻', permission: 'anomaly:read' },
-  { to: '#/reports', no: '05', label: '报告与导出', permission: 'report:read' },
-  { to: '#/audit', no: '06', label: '审计日志', permission: 'audit:read' },
+  { to: '#/calendar', no: '03', label: '运营日历', permission: 'calendar:read' },
+  { to: '#/anomalies', no: '04', label: '异常清单', permission: 'anomaly:read' },
+  { to: '#/attribution', no: '05', label: '归因下钻', permission: 'anomaly:read' },
+  { to: '#/reports', no: '06', label: '报告与导出', permission: 'report:read' },
+  { to: '#/audit', no: '07', label: '审计日志', permission: 'audit:read' },
 ];
 
 export const ROLE_LABELS = {
@@ -36,13 +37,14 @@ export const ROLE_LABELS = {
 export const PERMISSIONS = {
   admin: [
     'overview:read', 'store:read', 'store:write', 'metric:read', 'anomaly:read', 'anomaly:review',
-    'run:read', 'run:create', 'report:read', 'report:generate', 'export:read', 'audit:read',
+    'run:read', 'run:create', 'report:read', 'report:generate', 'calendar:read', 'calendar:write',
+    'export:read', 'audit:read',
   ],
   analyst: [
     'overview:read', 'store:read', 'metric:read', 'anomaly:read', 'anomaly:review',
-    'run:read', 'run:create', 'report:read', 'export:read',
+    'run:read', 'run:create', 'report:read', 'export:read', 'calendar:read',
   ],
-  viewer: ['overview:read', 'store:read', 'metric:read', 'anomaly:read', 'run:read', 'report:read'],
+  viewer: ['overview:read', 'store:read', 'metric:read', 'anomaly:read', 'run:read', 'report:read', 'calendar:read'],
 };
 
 export const ENUMS = {
@@ -57,6 +59,8 @@ export const ENUMS = {
   reportKind: { daily: '日报', weekly: '周报' },
   reportStatus: { draft: '草稿', published: '已发布' },
   factor: { adr: '房价 ADR', occ: '出租率 OCC', rooms: '可售房量' },
+  calendarDayType: { promo: '大促日', renovating: '停业改造', closed: '临时闭店' },
+  jobStatus: { running: '执行中', success: '成功', failed: '中断待续跑' },
 };
 
 export function can(role, permission) {

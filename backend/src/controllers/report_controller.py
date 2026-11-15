@@ -15,6 +15,29 @@ def get_report(db: Session, report_id: int) -> dict:
     return report_service.serialize(report_service.get_report(db, report_id))
 
 
+def invalidation_impact(db: Session, version: int | None = None) -> dict:
+    return report_service.invalidation_impact(db, version)
+
+
+def reassess(db: Session, report_id: int, principal: dict, request: Request) -> dict:
+    result = report_service.reassess(db, report_id, principal["email"])
+    audit_service.record(
+        db,
+        actor_email=principal["email"],
+        actor_role=principal["role"],
+        action="report.reassess",
+        entity="report",
+        entity_id=report_id,
+        detail={
+            "previous_calendar_version": result["previous_calendar_version"],
+            "recalculated_at_version": result["recalculated_at_version"],
+        },
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return result
+
+
 def generate(db: Session, payload: dict, principal: dict, request: Request) -> dict:
     report = report_service.generate(db, payload, principal["email"])
     audit_service.record(

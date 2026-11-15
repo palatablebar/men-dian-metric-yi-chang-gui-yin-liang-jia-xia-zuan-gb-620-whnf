@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models import Base
@@ -33,5 +33,9 @@ class Anomaly(Base):
     review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    calendar_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    invalidated: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    invalidated_reason: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    invalidated_by_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

@@ -23,6 +23,7 @@ def list_anomalies(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    include_invalidated: bool = False,
     limit: int = Query(20),
     offset: int = Query(0),
     db: Session = Depends(get_db),
@@ -39,6 +40,7 @@ def list_anomalies(
         date_from=date_from,
         date_to=date_to,
         q=q,
+        include_invalidated=include_invalidated,
         limit=page.limit,
         offset=page.offset,
     )

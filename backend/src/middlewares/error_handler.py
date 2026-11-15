@@ -28,9 +28,19 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError):
+        # pydantic 的 errors() 可能带不可序列化的 context（如自定义 ValueError），这里只保留可序列化字段
+        details = []
+        for item in exc.errors()[:4]:
+            details.append(
+                {
+                    "loc": [str(part) for part in item.get("loc", [])],
+                    "msg": str(item.get("msg", "")),
+                    "type": str(item.get("type", "")),
+                }
+            )
         return JSONResponse(
             status_code=422,
-            content={"code": "VALIDATION", "message": "请求参数不合法", "detail": exc.errors()[:4]},
+            content={"code": "VALIDATION", "message": "请求参数不合法", "detail": details},
         )
 
     @app.exception_handler(Exception)

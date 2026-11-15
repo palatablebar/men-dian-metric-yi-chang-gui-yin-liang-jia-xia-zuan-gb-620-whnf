@@ -39,15 +39,19 @@ def worker_alive() -> bool:
 def overview(db: Session) -> dict:
     stores_total = db.scalar(select(func.count()).select_from(Store)) or 0
     points_total = db.scalar(select(func.count()).select_from(MetricPoint)) or 0
-    anomalies_total = db.scalar(select(func.count()).select_from(Anomaly)) or 0
-    pending_total = db.scalar(select(func.count()).select_from(Anomaly).where(Anomaly.status == "pending")) or 0
-    impact_total = db.scalar(select(func.sum(Anomaly.impact_amount))) or 0.0
-    impact_pending = (
-        db.scalar(select(func.sum(Anomaly.impact_amount)).where(Anomaly.status == "pending")) or 0.0
+    active = Anomaly.invalidated.is_(False)
+    anomalies_total = db.scalar(select(func.count()).select_from(Anomaly).where(active)) or 0
+    pending_total = (
+        db.scalar(select(func.count()).select_from(Anomaly).where(Anomaly.status == "pending", active)) or 0
     )
-    severity_rows = db.execute(select(Anomaly.severity, func.count()).group_by(Anomaly.severity)).all()
-    status_rows = db.execute(select(Anomaly.status, func.count()).group_by(Anomaly.status)).all()
-    metric_rows = db.execute(select(Anomaly.metric_key, func.count()).group_by(Anomaly.metric_key)).all()
+    impacted_total = db.scalar(select(func.count()).select_from(Anomaly).where(Anomaly.invalidated.is_(True))) or 0
+    impact_total = db.scalar(select(func.sum(Anomaly.impact_amount)).where(active)) or 0.0
+    impact_pending = (
+        db.scalar(select(func.sum(Anomaly.impact_amount)).where(Anomaly.status == "pending", active)) or 0.0
+    )
+    severity_rows = db.execute(select(Anomaly.severity, func.count()).where(active).group_by(Anomaly.severity)).all()
+    status_rows = db.execute(select(Anomaly.status, func.count()).where(active).group_by(Anomaly.status)).all()
+    metric_rows = db.execute(select(Anomaly.metric_key, func.count()).where(active).group_by(Anomaly.metric_key)).all()
     store_status_rows = db.execute(select(Store.status, func.count()).group_by(Store.status)).all()
     region_rows = db.execute(select(Store.region, func.count()).group_by(Store.region)).all()
     bounds = db.execute(select(func.min(MetricPoint.stat_date), func.max(MetricPoint.stat_date))).one()
@@ -56,6 +60,7 @@ def overview(db: Session) -> dict:
 
     drag_rows = db.execute(
         select(Anomaly.store_id, func.sum(Anomaly.impact_amount), func.count())
+        .where(active)
         .group_by(Anomaly.store_id)
         .order_by(func.sum(Anomaly.impact_amount))
         .limit(6)
@@ -75,6 +80,7 @@ def overview(db: Session) -> dict:
 
     date_rows = db.execute(
         select(Anomaly.metric_date, func.count(), func.sum(Anomaly.impact_amount))
+        .where(active)
         .group_by(Anomaly.metric_date)
         .order_by(Anomaly.metric_date.desc())
         .limit(10)
@@ -94,6 +100,7 @@ def overview(db: Session) -> dict:
             "end": bounds[1].isoformat() if bounds and bounds[1] else None,
         },
         "anomalies_total": anomalies_total,
+        "invalidated_total": impacted_total,
         "pending_total": pending_total,
         "reviewed_total": reviewed,
         "impact_total": round(float(impact_total), 2),

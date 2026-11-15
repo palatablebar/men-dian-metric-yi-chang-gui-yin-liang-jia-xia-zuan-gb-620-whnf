@@ -46,16 +46,23 @@ def store_series(
     db: Session = Depends(get_db),
     principal: dict = Depends(require_roles(*READ_ROLES)),
 ) -> dict:
+    from src.services import calendar_service
     from src.utils.timeutil import parse_date
 
     bounds = metric_service.date_bounds(db)
     start_date = parse_date(start) or bounds[0]
     end_date = parse_date(end) or bounds[1]
-    series = metric_service.store_series(db, store_id, start_date, end_date)
+    special = calendar_service.special_days_by_store(db, store_ids=[store_id], start=start_date, end=end_date)
+    series = metric_service.store_series(db, store_id, start_date, end_date, special=special)
     return {
         "store_id": store_id,
         "start": start_date.isoformat(),
         "end": end_date.isoformat(),
+        "calendar_version": calendar_service.current_version(db),
+        "special_days": [
+            {"date": day, "day_type": day_type}
+            for day, day_type in sorted(special.get(store_id, {}).items())
+        ],
         "points": series,
         "summary": {
             "days": len(series),

@@ -23,9 +23,28 @@ def list_reports(
     return report_controller.list_reports(db, kind=kind, limit=limit, offset=offset)
 
 
+@router.get("/impact/invalidation")
+def invalidation_impact(
+    version: int | None = None,
+    db: Session = Depends(get_db),
+    principal: dict = Depends(require_roles(*READ_ROLES)),
+) -> dict:
+    return report_controller.invalidation_impact(db, version)
+
+
 @router.get("/{report_id}")
 def get_report(report_id: int, db: Session = Depends(get_db), principal: dict = Depends(require_roles(*READ_ROLES))) -> dict:
     return report_controller.get_report(db, report_id)
+
+
+@router.post("/{report_id}/reassess")
+def reassess_report(
+    report_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    principal: dict = Depends(require_roles(*REPORT_GENERATE_ROLES)),
+) -> dict:
+    return report_controller.reassess(db, report_id, principal, request)
 
 
 @router.post("", status_code=201)

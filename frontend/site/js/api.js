@@ -92,6 +92,17 @@ export const api = {
     get: (id) => request(`/api/anomalies/${id}`),
     review: (id, body) => request(`/api/anomalies/${id}/review`, { method: 'PATCH', body }),
   },
+  calendar: {
+    list: (query) => request('/api/calendar', { query }),
+    version: () => request('/api/calendar/version'),
+    revisions: (query) => request('/api/calendar/revisions', { query }),
+    forStore: (storeId) => request(`/api/calendar/store/${storeId}`),
+    create: (body, query) => request('/api/calendar', { method: 'POST', body, query }),
+    update: (id, body, query) => request(`/api/calendar/${id}`, { method: 'PATCH', body, query }),
+    deactivate: (id) => request(`/api/calendar/${id}`, { method: 'DELETE' }),
+    jobs: (query) => request('/api/calendar/jobs', { query }),
+    resumeJob: (id) => request(`/api/calendar/jobs/${id}/resume`, { method: 'POST' }),
+  },
   attributions: {
     forAnomaly: (id) => request(`/api/attributions/anomaly/${id}`),
     list: (query) => request('/api/attributions', { query }),
@@ -100,12 +111,15 @@ export const api = {
     list: (query) => request('/api/runs', { query }),
     get: (id) => request(`/api/runs/${id}`),
     create: (body) => request('/api/runs', { method: 'POST', body }),
+    resume: (id) => request(`/api/runs/${id}/resume`, { method: 'POST' }),
   },
   reports: {
     list: (query) => request('/api/reports', { query }),
     get: (id) => request(`/api/reports/${id}`),
     create: (body) => request('/api/reports', { method: 'POST', body }),
     publish: (id, body) => request(`/api/reports/${id}`, { method: 'PATCH', body }),
+    reassess: (id) => request(`/api/reports/${id}/reassess`, { method: 'POST' }),
+    impact: (query) => request('/api/reports/impact/invalidation', { query }),
   },
   audit: {
     list: (query) => request('/api/audit', { query }),

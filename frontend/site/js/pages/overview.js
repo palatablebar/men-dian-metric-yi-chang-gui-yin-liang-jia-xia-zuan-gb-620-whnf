@@ -33,7 +33,7 @@ export const overviewPage = {
         <div class="hero-main">
           <div class="eyebrow">数据窗口 ${esc(data.data_window.start || '—')} → ${esc(data.data_window.end || '—')} · ${esc(data.days)} 天</div>
           <h2>${data.anomalies_total} 起异常，影响 <em>${fmtMoney(data.impact_total)}</em></h2>
-          <p>其中 ${data.pending_total} 起待处理，${data.reviewed_total} 起已有结论；门店 ${data.stores_total} 家、指标点 ${data.points_total.toLocaleString('zh-CN')} 条。</p>
+          <p>其中 ${data.pending_total} 起待处理，${data.reviewed_total} 起已有结论；门店 ${data.stores_total} 家、指标点 ${data.points_total.toLocaleString('zh-CN')} 条。${data.invalidated_total ? `另有 ${data.invalidated_total} 起因日历规则变更待重算。` : ''}</p>
           <div class="hero-actions">
             ${latest ? `<span class="chip">最近检测 ${esc(latest.run_no)} · ${esc(latest.status_label)} · ${latest.anomaly_count} 起</span>` : ''}
             ${data.latest_report ? `<span class="chip">最近报告 ${esc(data.latest_report.report_no)} · ${esc(data.latest_report.status_label)}</span>` : ''}
@@ -47,6 +47,7 @@ export const overviewPage = {
         { label: '影响金额', value: fmtMoney(data.impact_total), hint: `待处理 ${fmtMoney(data.impact_pending)}` },
         { label: '待处理', value: data.pending_total, hint: data.worker_alive ? '夜班任务在岗' : '夜班任务心跳超时' },
         { label: '指标点', value: data.points_total.toLocaleString('zh-CN'), hint: `${data.days} 天 × 3 渠道` },
+        { label: '日历待重算', value: data.invalidated_total || 0, hint: '规则变更后失效重算' },
       ])}
 
       <div class="grid-2">

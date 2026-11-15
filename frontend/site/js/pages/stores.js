@@ -24,8 +24,13 @@ async function openStore(view, ctx, store) {
       ['平均 ADR', `${series.summary.adr.toFixed(0)} 元`],
       ['平均 OCC', fmtPct(series.summary.occupancy)],
     ])}
-    <h3 class="sub-head">营收日序列（可标注异常日）</h3>
+    <h3 class="sub-head">营收日序列（特殊日已标注，不进入常态基线）</h3>
     ${seriesChart(points, { height: 140 })}
+    <div class="chip-wrap">${points
+      .filter((point) => point.is_special)
+      .slice(-14)
+      .map((point) => `<span class="chip warn mono">${esc(point.date)} · ${esc(ENUMS.calendarDayType[point.special_type] || '特殊日')}</span>`)
+      .join('') || '<span class="muted small">窗口内没有特殊日</span>'}</div>
     <h3 class="sub-head">指标点（最近 10 条渠道明细）</h3>
     ${table({
       rows: points.slice(-10).reverse().map((point, index) => ({ id: `${point.date}-${index}`, ...point })),
@@ -36,12 +41,19 @@ async function openStore(view, ctx, store) {
         { key: 'occupancy', label: 'OCC', className: 'num', render: (row) => fmtPct(row.occupancy) },
         { key: 'rooms_sold', label: '售出', className: 'num' },
         { key: 'is_weekend', label: '周末', render: (row) => (row.is_weekend ? '<span class="badge">周末</span>' : '—') },
+        { key: 'is_special', label: '基线', render: (row) => (row.is_special ? `<span class="badge warn">${esc(ENUMS.calendarDayType[row.special_type] || '特殊日')}</span>` : '<span class="muted">纳入</span>') },
       ],
     })}`,
-    footer: `<button class="btn accent" data-anomalies>看这家店的异常</button>`,
+    footer: `<div class="footer-actions">
+        <button class="btn accent" data-anomalies>看这家店的异常</button>
+        <button class="btn ghost" data-calendar>运营日历（纳入/排除）</button>
+      </div>`,
   });
   root.querySelector('[data-anomalies]')?.addEventListener('click', () => {
     location.hash = `#/anomalies?store_id=${store.id}`;
+  });
+  root.querySelector('[data-calendar]')?.addEventListener('click', () => {
+    location.hash = `#/calendar?store_id=${store.id}`;
   });
 }
 

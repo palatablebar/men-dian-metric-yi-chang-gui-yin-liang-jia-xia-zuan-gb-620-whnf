@@ -5,6 +5,7 @@ from src.routes.anomalies import router as anomalies_router
 from src.routes.attributions import router as attributions_router
 from src.routes.audit import router as audit_router
 from src.routes.auth import router as auth_router
+from src.routes.calendar import router as calendar_router
 from src.routes.exports import router as exports_router
 from src.routes.health import router as health_router
 from src.routes.metrics import router as metrics_router
@@ -18,6 +19,7 @@ api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(overview_router)
 api_router.include_router(stores_router)
+api_router.include_router(calendar_router)
 api_router.include_router(metrics_router)
 api_router.include_router(runs_router)
 api_router.include_router(anomalies_router)

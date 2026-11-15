@@ -45,3 +45,19 @@ def list_runs(db: Session, **filters) -> dict:
 
 def get_run(db: Session, run_id: int) -> dict:
     return run_service.serialize(run_service.get_run(db, run_id))
+
+
+def resume_run(db: Session, run_id: int, principal: dict, request: Request) -> dict:
+    run = run_service.resume_run(db, run_id, operator_email=principal["email"])
+    audit_service.record(
+        db,
+        actor_email=principal["email"],
+        actor_role=principal["role"],
+        action="run.resume",
+        entity="run",
+        entity_id=run.id,
+        detail={"run_no": run.run_no, "status": run.status, "anomalies": run.anomaly_count},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return run_service.serialize(run)

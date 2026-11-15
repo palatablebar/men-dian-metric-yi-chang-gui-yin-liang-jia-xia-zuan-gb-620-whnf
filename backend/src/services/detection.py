@@ -2,6 +2,11 @@
 
 口径（README §10 同步，改动需两侧一致）：
 - 基线窗口：取当前点之前、**同一周末/工作日分层**的最后 `window`(默认 28) 个观测；
+  运营日历标记为特殊日（停业改造 / 临时闭店 / 大促）的观测**不进入常态基线**，也不算作
+  方向延续的前一观测（避免特殊日把可比样本撑大、或把正常日判成延续）；
+- 特殊日仍按真实观测参与当期判定（当期异常仍按真实经营结果说明），但方向延续看的
+  「前一观测」会跳过特殊日，因此单日/连续大促与闭店不会被当成延续信号误报；
+  当期观测值永远是真实经营结果，不做任何平滑或回填；
 - 稳健统计量：`median` 与 `MAD = median(|x - median|)`；`MAD == 0` 时退化为平均绝对偏差，
   仍为 0 则视为「基线无波动」，记入 skipped，不产出异常；
 - 稳健 z：`robust_z = 0.6745 * (x - median) / MAD`（0.6745 为正态下 MAD 与 σ 的比例常数）；
@@ -9,10 +14,13 @@
   即「方向一致 2 天」，避免单日抖动误报；
 - 严重度：`|z| >= 5.0 或 |影响金额| >= 80000` → high；`|z| >= 4.2 或 >= 30000` → medium；否则 low；
 - 影响金额（按指标）：rev → `Δ营收`；adr → `Δadr × 当期已售房晚`；occ → `Δocc × 当期可售房量 × 当期adr`；
+- 样本集：命中项回 `window_dates`（实际参与基线的日期）与 `excluded_special_days`（被日历排除的日期），
+  量价分解与维度下钻必须引用同一组日期；
 - 纯函数、无数据库与框架依赖，同一输入两次输出逐字段一致（可单测）。
 """
 from __future__ import annotations
 
+import hashlib
 from statistics import median
 
 MAD_SCALE = 0.6745
@@ -49,8 +57,13 @@ def robust_stats(values: list[float]) -> tuple[float, float, str]:
     return float(center), float(mad), basis
 
 
+def is_special(row: dict) -> bool:
+    """运营日历标记的特殊日（停业改造/临时闭店/大促）不进常态基线。"""
+    return bool(row.get("is_special"))
+
+
 def trailing_window(series: list[dict], index: int, window: int, stratify: bool) -> list[dict]:
-    """index 之前、可选按周末分层、最多 window 条，保持时间升序。"""
+    """index 之前、可选按周末分层、跳过特殊日、最多 window 条，保持时间升序。"""
     target_weekend = bool(series[index]["is_weekend"])
     picked: list[dict] = []
     cursor = index - 1
@@ -59,10 +72,42 @@ def trailing_window(series: list[dict], index: int, window: int, stratify: bool)
         if stratify and bool(row["is_weekend"]) != target_weekend:
             cursor -= 1
             continue
+        if is_special(row):
+            cursor -= 1
+            continue
         picked.append(row)
         cursor -= 1
     picked.reverse()
     return picked
+
+
+def previous_observation(series: list[dict], index: int) -> int | None:
+    """index 之前最近的**非特殊日**观测下标（方向延续只看常态观测）。"""
+    cursor = index - 1
+    while cursor >= 0:
+        if not is_special(series[cursor]):
+            return cursor
+        cursor -= 1
+    return None
+
+
+def excluded_special_days(series: list[dict], window: list[dict], index: int, stratify: bool) -> list[dict]:
+    """落在「本应取到的窗口区间」内、但因特殊日被排除的观测（供页面展示排除日期）。"""
+    if not window:
+        return []
+    earliest = window[0]["date"]
+    target_weekend = bool(series[index]["is_weekend"])
+    set_aside: list[dict] = []
+    for cursor in range(index - 1, -1, -1):
+        row = series[cursor]
+        if row["date"] < earliest:
+            break
+        if stratify and bool(row["is_weekend"]) != target_weekend:
+            continue
+        if is_special(row):
+            set_aside.append({"date": row["date"], "special_type": row.get("special_type")})
+    set_aside.reverse()
+    return set_aside
 
 
 def _baseline_triple(window: list[dict]) -> dict:
@@ -105,6 +150,18 @@ def _value_of(row: dict, metric_key: str) -> float:
     raise ValueError(f"unsupported metric: {metric_key}")
 
 
+def sample_key(store_id: int, metric_key: str, window_dates: list[str]) -> str:
+    """样本指纹：由实际参与基线的整组日期决定（异常 / 归因 / 下钻共用）。
+
+    同一天换一组样本（例如日历排除特殊日）一定会得到不同的指纹；
+    首尾与天数保留在可读前缀里，便于人工核对。
+    """
+    if not window_dates:
+        return ""
+    digest = hashlib.sha1("|".join(window_dates).encode("utf-8")).hexdigest()[:10]
+    return f"{store_id}:{metric_key}:{window_dates[0]}~{window_dates[-1]}:{len(window_dates)}:{digest}"
+
+
 def detect_series(series: list[dict], metric_key: str = "rev", **options) -> dict:
     """对一条时间升序的门店序列做异常检测。
 
@@ -124,13 +181,13 @@ def detect_series(series: list[dict], metric_key: str = "rev", **options) -> dic
     evaluated = 0
 
     for index in range(len(series)):
+        current = series[index]
         window = trailing_window(series, index, window_size, stratify)
         if len(window) < min_samples:
-            skipped.append({"date": series[index]["date"], "reason": "insufficient_baseline", "samples": len(window)})
+            skipped.append({"date": current["date"], "reason": "insufficient_baseline", "samples": len(window)})
             continue
         values = [_value_of(row, metric_key) for row in window]
         center, mad, basis = robust_stats(values)
-        current = series[index]
         raw = _value_of(current, metric_key)
         if basis == "degenerate":
             skipped.append({"date": current["date"], "reason": "degenerate_baseline", "samples": len(window)})
@@ -144,8 +201,8 @@ def detect_series(series: list[dict], metric_key: str = "rev", **options) -> dic
 
         previous_ok = False
         previous_z = None
-        if index >= 1:
-            prev_index = index - 1
+        prev_index = previous_observation(series, index)
+        if prev_index is not None:
             if prev_index not in z_cache:
                 prev_window = trailing_window(series, prev_index, window_size, stratify)
                 if len(prev_window) >= min_samples:
@@ -186,6 +243,11 @@ def detect_series(series: list[dict], metric_key: str = "rev", **options) -> dic
                 "window_samples": len(window),
                 "window_start": window[0]["date"],
                 "window_end": window[-1]["date"],
+                "window_dates": [row["date"] for row in window],
+                "sample_key": sample_key(int(current.get("store_id") or 0), metric_key, [row["date"] for row in window]),
+                "excluded_special_days": excluded_special_days(series, window, index, stratify),
+                "special_day": is_special(current),
+
                 "baseline_triple": {key: round(value, 6) for key, value in baseline.items()},
                 "current_triple": {
                     "adr": round(float(current["adr"]), 6),

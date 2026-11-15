@@ -22,6 +22,9 @@ export const attributionPage = {
     }
     const shares = detail.shares;
     const dims = detail.dimensions || {};
+    const sample = detail.sample || {};
+    const sampleDays = sample.days || [];
+    const excluded = sample.excluded_special_days || [];
     view.innerHTML = `
       <section class="panel">
         <div class="panel-head">
@@ -50,6 +53,19 @@ export const attributionPage = {
         <div class="panel-head">
           <h2>${esc(detail.store_name)} · ${esc(detail.metric_date)}</h2>
           <span class="meta">Δ营收 ${fmtMoney(detail.total_delta)} · 残差 ${detail.residual.toFixed(2)} 元</span>
+        </div>
+        <div class="panel-body">
+          <h3 class="sub-head">同一组样本（异常 / 量价三项 / 下钻共用）</h3>
+          <p class="muted small">样本 ${esc(sample.start || '—')} → ${esc(sample.end || '—')}，共 ${sampleDays.length} 天，样本指纹 <span class="mono">${esc(sample.key || '—')}</span>；日历 v${esc(sample.attribution_calendar_version ?? 0)}。样本一致性：<span class="badge ${sample.consistent ? 'ok' : 'danger'}">${sample.consistent ? '一致' : '不一致，请重算'}</span></p>
+          <div class="chip-wrap">${sampleDays.map((day) => `<span class="chip mono">${esc(day)}</span>`).join('')}</div>
+          <p class="muted small">被运营日历排除的特殊日（${excluded.length} 天）：${excluded.map((item) => `<span class="chip warn mono">${esc(item.date)} · ${esc(ENUMS.calendarDayType[item.special_type] || item.special_type || '特殊日')}</span>`).join('') || '无'}</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>量价分解</h2>
+          <span class="meta">LMDI 加法形式 · 与异常同一样本</span>
         </div>
         <div class="panel-body split">
           <div>
@@ -83,7 +99,7 @@ export const attributionPage = {
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>同维度明细</h2><span class="meta">contribution = group Δ / total Δ</span></div>
+        <div class="panel-head"><h2>同维度明细</h2><span class="meta">contribution = group Δ / total Δ · 同一组样本</span></div>
         <div class="panel-body grid-3">
           ${['channel', 'store', 'room_type']
             .map(

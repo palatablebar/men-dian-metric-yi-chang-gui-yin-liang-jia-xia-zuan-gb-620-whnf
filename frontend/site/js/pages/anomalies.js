@@ -2,11 +2,12 @@ import { api } from '../api.js';
 import { ENUMS, badgeTone, can, fmtMoney, fmtPct, reviewTone } from '../config.js';
 import { bindFilters, drawer, errorBox, errorMessage, esc, field, filterBar, fmtTime, kv, table, toast } from '../ui.js';
 
-const state = { severity: '', status: '', metric_key: '', region: '', q: '', data: [] };
+const state = { severity: '', status: '', metric_key: '', region: '', q: '', includeInvalidated: false, data: [] };
 
 function openDetail(view, ctx, item) {
   const canReview = can(ctx.user.role, 'anomaly:review');
   const payload = item.payload || {};
+  const excluded = payload.excluded_special_days || [];
   const { root, close } = drawer({
     title: `${item.store_name} · ${item.metric_date}`,
     subtitle: `${item.store_code} · ${item.metric_label} · 稳健 z ${item.robust_z.toFixed(2)}`,
@@ -21,12 +22,24 @@ function openDetail(view, ctx, item) {
       ['复核人', esc(item.reviewer || '—')],
       ['复核备注', esc(item.review_note || '—')],
       ['基线窗口', `${esc(payload.window_start || '—')} → ${esc(payload.window_end || '—')}（${esc(payload.window_samples || 0)} 个同期样本）`],
+      ['样本指纹', `<span class="mono">${esc(payload.sample_key || '—')}</span>`],
+      ['日历版本', `v${esc(item.calendar_version ?? 0)}`],
     ])}
+    <h3 class="sub-head">纳入基线的日期（${(payload.window_dates || []).length} 天）</h3>
+    <p class="muted small">异常、量价三项与下钻共用这一组样本日期。</p>
+    <div class="chip-wrap">${(payload.window_dates || [])
+      .map((day) => `<span class="chip mono">${esc(day)}</span>`)
+      .join('') || '<span class="muted">—</span>'}</div>
+    <h3 class="sub-head">被运营日历排除的特殊日（${excluded.length} 天）</h3>
+    <p class="muted small">停业改造 / 临时闭店 / 大促日不进入常态基线，当期观测仍按真实经营结果保留。</p>
+    <div class="chip-wrap">${excluded
+      .map((entry) => `<span class="chip warn mono">${esc(entry.date)} · ${esc(ENUMS.calendarDayType[entry.special_type] || entry.special_type || '特殊日')}</span>`)
+      .join('') || '<span class="muted">窗口内没有特殊日</span>'}</div>
     <h3 class="sub-head">基线三元组 vs 当期三元组</h3>
     ${table({
       rows: [
         { id: 'base', k: '基线（窗口 median）', ...(payload.baseline_triple || {}) },
-        { id: 'cur', k: '当期', ...(payload.current_triple || {}) },
+        { id: 'cur', k: '当期（真实经营结果）', ...(payload.current_triple || {}) },
       ],
       columns: [
         { key: 'k', label: '口径' },
@@ -36,16 +49,42 @@ function openDetail(view, ctx, item) {
         { key: 'revenue', label: '营收', className: 'num', render: (row) => (row.revenue ? fmtMoney(row.revenue) : '—') },
       ],
     })}`,
-    footer: canReview
-      ? `<form id="review-form" class="stack">
-          ${field({ label: '处理结论', name: 'status', value: item.status, options: Object.entries(ENUMS.review).map(([value, label]) => ({ value, label })) })}
-          ${field({ label: '结论备注', name: 'note', value: item.review_note || '', placeholder: '一句话写清原因与动作' })}
-          <button class="btn accent" type="submit">保存结论</button>
-        </form>`
-      : '<span class="mono muted">只读角色可以查看，但不能写结论</span>',
+    footer: `<div class="footer-actions">
+        <button class="btn ghost" data-go-attribution>归因下钻</button>
+        <button class="btn ghost" data-go-report>进入对应报告</button>
+        <button class="btn ghost" data-go-calendar>门店运营日历</button>
+      </div>
+      ${
+        canReview
+          ? `<form id="review-form" class="stack" style="margin-top:12px">
+              ${field({ label: '处理结论', name: 'status', value: item.status, options: Object.entries(ENUMS.review).map(([value, label]) => ({ value, label })) })}
+              ${field({ label: '结论备注', name: 'note', value: item.review_note || '', placeholder: '一句话写清原因与动作' })}
+              <button class="btn accent" type="submit">保存结论</button>
+            </form>`
+          : '<span class="mono muted">只读角色可以查看，但不能写结论</span>'
+      }`,
   });
   root.querySelector('[data-go-attribution]')?.addEventListener('click', () => {
     location.hash = `#/attribution?anomaly_id=${item.id}`;
+  });
+  root.querySelector('[data-go-report]')?.addEventListener('click', async () => {
+    try {
+      const data = await api.reports.list({ limit: 100 });
+      const report = data.items.find((entry) => entry.period_start <= item.metric_date && item.metric_date <= entry.period_end);
+      if (!report) {
+        toast('这个日期还没有对应报告，去报告页生成一份', 'err');
+        location.hash = '#/reports';
+        return;
+      }
+      location.hash = `#/reports?report_id=${report.id}`;
+      close();
+    } catch (err) {
+      toast(errorMessage(err), 'err');
+    }
+  });
+  root.querySelector('[data-go-calendar]')?.addEventListener('click', () => {
+    location.hash = `#/calendar?store_id=${item.store_id}`;
+    close();
   });
   root.querySelector('#review-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -114,6 +153,7 @@ export const anomaliesPage = {
           region: state.region,
           q: state.q,
           store_id: state.storeId,
+          include_invalidated: state.includeInvalidated,
           limit: 100,
         }),
         api.stores.regions(),
@@ -129,7 +169,7 @@ export const anomaliesPage = {
         <div class="panel-head">
           <h2>异常清单 ${state.storeId ? `<span class="mono muted">· 门店 #${esc(state.storeId)}</span>` : ''}</h2>
           <div class="head-actions">
-            <span class="meta">${data.total} 起</span>
+            <span class="meta">${data.total} 起${state.includeInvalidated ? '（含日历失效待重算）' : ''}</span>
             ${can(ctx.user.role, 'export:read') ? '<button class="btn sm ghost" id="export-anomalies">导出异常 CSV</button>' : ''}
             ${can(ctx.user.role, 'run:create') ? '<button class="btn sm accent" id="new-run">发起检测</button>' : ''}
           </div>
@@ -143,6 +183,7 @@ export const anomaliesPage = {
               { label: '指标', name: 'metric_key', value: state.metric_key, options: [{ value: '', label: '全部' }, ...Object.entries(ENUMS.metric).map(([value, label]) => ({ value, label }))] },
               { label: '严重度', name: 'severity', value: state.severity, options: [{ value: '', label: '全部' }, ...Object.entries(ENUMS.severity).map(([value, label]) => ({ value, label }))] },
               { label: '处理状态', name: 'status', value: state.status, options: [{ value: '', label: '全部' }, ...Object.entries(ENUMS.review).map(([value, label]) => ({ value, label }))] },
+              { label: '日历失效', name: 'include_invalidated', value: state.includeInvalidated ? 'true' : '', options: [{ value: '', label: '只看有效' }, { value: 'true', label: '含待重算' }] },
             ],
           })}
         </div>
@@ -157,6 +198,8 @@ export const anomaliesPage = {
             { key: 'impact_amount', label: '影响金额', className: 'num', render: (row) => `<span class="${row.impact_amount < 0 ? 'neg' : 'pos'}">${fmtMoney(row.impact_amount)}</span>` },
             { key: 'severity', label: '等级', render: (row) => `<span class="badge ${badgeTone(row.severity)}">${esc(row.severity_label)}</span>` },
             { key: 'status', label: '处理', render: (row) => `<span class="badge ${reviewTone(row.status)}">${esc(row.status_label)}</span>` },
+            { key: 'calendar_version', label: '日历', className: 'num', render: (row) => `v${row.calendar_version ?? 0}` },
+            { key: 'invalidated', label: '状态', render: (row) => (row.invalidated ? '<span class="badge danger">日历失效待重算</span>' : '<span class="muted">有效</span>') },
           ],
           empty: { title: '这个筛选下没有异常', hint: '清空筛选或发起一次检测。' },
         })}
@@ -167,6 +210,7 @@ export const anomaliesPage = {
       state.metric_key = values.metric_key;
       state.severity = values.severity;
       state.status = values.status;
+      state.includeInvalidated = values.include_invalidated === 'true';
       anomaliesPage.render(view, ctx);
     });
     view.querySelectorAll('table.data tbody tr').forEach((row) => {

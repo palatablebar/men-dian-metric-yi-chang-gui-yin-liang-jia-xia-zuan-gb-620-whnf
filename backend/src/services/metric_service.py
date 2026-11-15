@@ -81,10 +81,15 @@ def list_points(
     }
 
 
-def store_series(db: Session, store_id: int, start: date, end: date) -> list[dict]:
-    """门店日序列：营收/售量按日汇总，ADR = 营收/售量、OCC = 售量/可售房量。"""
+def store_series(db: Session, store_id: int, start: date, end: date, special: dict[int, dict[str, str]] | None = None) -> list[dict]:
+    """门店日序列：营收/售量按日汇总，ADR = 营收/售量、OCC = 售量/可售房量。
+
+    传入 `special`（{store_id: {iso_date: day_type}}）时，逐日标注 is_special / special_type，
+    便于页面标出「未纳入常态基线」的日期。
+    """
     if db.get(Store, store_id) is None:
         raise not_found("store", store_id)
+    special_days = (special or {}).get(store_id, {})
     rows = db.execute(
         select(
             MetricPoint.stat_date,
@@ -106,15 +111,18 @@ def store_series(db: Session, store_id: int, start: date, end: date) -> list[dic
         revenue = float(revenue or 0.0)
         sold = int(sold or 0)
         rooms = int(rooms or 0)
+        iso = stat_date.isoformat()
         series.append(
             {
-                "date": stat_date.isoformat(),
+                "date": iso,
                 "revenue": round(revenue, 2),
                 "rooms_sold": sold,
                 "rooms_available": rooms,
                 "adr": round(revenue / sold, 4) if sold else 0.0,
                 "occupancy": round(sold / rooms, 6) if rooms else 0.0,
                 "is_weekend": bool(weekend),
+                "is_special": iso in special_days,
+                "special_type": special_days.get(iso),
             }
         )
     return series
@@ -129,7 +137,8 @@ def channel_split(db: Session, store_id: int, stat_date: date) -> dict[str, floa
     return {channel: float(revenue or 0.0) for channel, revenue in rows}
 
 
-def channel_window(db: Session, store_id: int, start: date, end: date) -> dict[str, list[float]]:
+def channel_window(db: Session, store_id: int, start: date, end: date) -> dict[str, dict[str, float]]:
+    """{channel: {iso_date: revenue}}；调用方按样本日期（`window_dates`）挑值，避免混入特殊日。"""
     rows = db.execute(
         select(MetricPoint.channel, MetricPoint.stat_date, func.sum(MetricPoint.revenue))
         .where(
@@ -139,13 +148,19 @@ def channel_window(db: Session, store_id: int, start: date, end: date) -> dict[s
         )
         .group_by(MetricPoint.channel, MetricPoint.stat_date)
     ).all()
-    bucket: dict[str, list[float]] = {}
-    for channel, _, revenue in rows:
-        bucket.setdefault(channel, []).append(float(revenue or 0.0))
+    bucket: dict[str, dict[str, float]] = {}
+    for channel, stat_date, revenue in rows:
+        bucket.setdefault(channel, {})[stat_date.isoformat()] = float(revenue or 0.0)
     return bucket
 
 
-def series_points(db: Session, start: date, end: date, store_id: int | None = None) -> dict[int, list[dict]]:
+def series_points(
+    db: Session,
+    start: date,
+    end: date,
+    store_id: int | None = None,
+    special: dict[int, dict[str, str]] | None = None,
+) -> dict[int, list[dict]]:
     """批量取门店日序列（检测运行用，一次聚合查询）。"""
     stmt = (
         select(
@@ -168,15 +183,20 @@ def series_points(db: Session, start: date, end: date, store_id: int | None = No
         revenue = float(revenue or 0.0)
         sold = int(sold or 0)
         rooms = int(rooms or 0)
+        iso = stat_date.isoformat()
+        special_days = (special or {}).get(store_key, {})
         grouped.setdefault(store_key, []).append(
             {
-                "date": stat_date.isoformat(),
+                "date": iso,
                 "revenue": round(revenue, 2),
                 "rooms_sold": sold,
                 "rooms_available": rooms,
                 "adr": round(revenue / sold, 6) if sold else 0.0,
                 "occupancy": round(sold / rooms, 6) if rooms else 0.0,
                 "is_weekend": bool(weekend),
+                "is_special": iso in special_days,
+                "special_type": special_days.get(iso),
+                "store_id": store_key,
             }
         )
     return grouped

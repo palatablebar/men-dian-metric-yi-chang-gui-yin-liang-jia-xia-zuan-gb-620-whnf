@@ -5,6 +5,7 @@ import { errorMessage, esc, toast } from './ui.js';
 import loginPage from './pages/login.js';
 import overviewPage from './pages/overview.js';
 import storesPage from './pages/stores.js';
+import calendarPage from './pages/calendar.js';
 import anomaliesPage from './pages/anomalies.js';
 import attributionPage from './pages/attribution.js';
 import reportsPage from './pages/reports.js';
@@ -13,6 +14,7 @@ import auditPage from './pages/audit.js';
 const routes = [
   { path: '#/overview', page: overviewPage, permission: 'overview:read' },
   { path: '#/stores', page: storesPage, permission: 'store:read' },
+  { path: '#/calendar', page: calendarPage, permission: 'calendar:read' },
   { path: '#/anomalies', page: anomaliesPage, permission: 'anomaly:read' },
   { path: '#/attribution', page: attributionPage, permission: 'anomaly:read' },
   { path: '#/reports', page: reportsPage, permission: 'report:read' },

@@ -1242,6 +1242,18 @@ table.data td.num {
   flex-wrap: wrap;
   margin-top: 12px;
 }
+.chip-wrap {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0 12px;
+}
+.chip-warn,
+.chip.warn {
+  border-color: var(--warn, var(--rule-strong));
+  color: var(--ink);
+  background: var(--paper-2);
+}
 
 @media (max-width: 1280px) {
   .hero {

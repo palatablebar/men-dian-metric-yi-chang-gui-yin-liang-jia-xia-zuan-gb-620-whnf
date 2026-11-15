@@ -45,6 +45,10 @@ def serialize(anomaly: Anomaly, store: Store | None = None, attribution_id: int 
         "reviewed_at": iso_utc(anomaly.reviewed_at),
         "attribution_id": attribution_id,
         "payload": anomaly.payload or {},
+        "calendar_version": anomaly.calendar_version,
+        "invalidated": anomaly.invalidated,
+        "invalidated_reason": anomaly.invalidated_reason,
+        "invalidated_by_version": anomaly.invalidated_by_version,
         "created_at": iso_utc(anomaly.created_at),
         "updated_at": iso_utc(anomaly.updated_at),
     }
@@ -66,12 +70,15 @@ def list_anomalies(
     date_from: str | None = None,
     date_to: str | None = None,
     q: str | None = None,
+    include_invalidated: bool = False,
     limit: int = 20,
     offset: int = 0,
 ) -> dict:
     stmt = select(Anomaly)
     count_stmt = select(func.count()).select_from(Anomaly)
     conditions = []
+    if not include_invalidated:
+        conditions.append(Anomaly.invalidated.is_(False))
     if store_id:
         conditions.append(Anomaly.store_id == store_id)
     if metric_key:
@@ -147,7 +154,11 @@ def count_by(db: Session, column) -> list[tuple[str, int]]:
 
 
 def ensure_anomaly(db: Session, payload: dict) -> tuple[Anomaly, bool]:
-    """自然键 (store_id, metric_date, metric_key) 幂等 upsert；不覆盖复核状态。"""
+    """自然键 (store_id, metric_date, metric_key) 幂等 upsert；不覆盖复核状态、不重复入库。
+
+    已复核（confirmed / dismissed）的异常只补充检测字段与样本引用，状态与结论原样保留；
+    这也是「同版本重跑不退还复核」的保证。
+    """
     existing = db.scalar(
         select(Anomaly).where(
             Anomaly.store_id == payload["store_id"],
@@ -156,16 +167,16 @@ def ensure_anomaly(db: Session, payload: dict) -> tuple[Anomaly, bool]:
         )
     )
     if existing is not None:
-        if existing.status == "pending":
-            existing.run_id = payload.get("run_id") or existing.run_id
-            existing.observed = payload["observed"]
-            existing.baseline = payload["baseline"]
-            existing.mad = payload["mad"]
-            existing.robust_z = payload["robust_z"]
-            existing.severity = payload["severity"]
-            existing.impact_amount = payload["impact_amount"]
-            existing.payload = payload["payload"]
-            db.flush()
+        existing.run_id = payload.get("run_id") or existing.run_id
+        existing.observed = payload["observed"]
+        existing.baseline = payload["baseline"]
+        existing.mad = payload["mad"]
+        existing.robust_z = payload["robust_z"]
+        existing.severity = payload["severity"]
+        existing.impact_amount = payload["impact_amount"]
+        existing.payload = payload["payload"]
+        existing.calendar_version = int(payload.get("calendar_version") or 0)
+        db.flush()
         return existing, False
     anomaly = Anomaly(**payload)
     db.add(anomaly)

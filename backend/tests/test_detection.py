@@ -119,3 +119,66 @@ def test_deterministic_output():
     first = detection.detect_series(series, "rev")
     second = detection.detect_series(series, "rev")
     assert first == second
+
+
+def _mark_special(series: list[dict], dates: set[str], day_type: str = "promo") -> list[dict]:
+    return [
+        {**row, "is_special": row["date"] in dates, "special_type": day_type if row["date"] in dates else None}
+        for row in series
+    ]
+
+
+def test_special_days_are_excluded_from_baseline_but_current_still_evaluated():
+    values = _flat_series(days=60)
+    values[44] = 930.0
+    values[45] = 820.0  # 两日同向下跌 → 正常应触发
+    series = _series(values)
+    # 窗口内的一个普通工作日被标为大促：只影响可比样本，不影响当期判定
+    special_dates = {series[40]["date"]}
+    marked = _mark_special(series, special_dates)
+    result = detection.detect_series(marked, "rev")
+    assert len(result["hits"]) == 1
+    hit = result["hits"][0]
+    assert hit["date"] == series[45]["date"]
+    assert hit["special_day"] is False
+    assert series[40]["date"] not in hit["window_dates"]
+    assert series[40]["date"] in {item["date"] for item in hit["excluded_special_days"]}
+    assert hit["window_samples"] == len(hit["window_dates"])
+    assert hit["sample_key"]
+    # 同期样本仍够 10 条（排除 1 天后从更早处补齐）
+    assert hit["window_samples"] == 28
+
+
+def test_special_day_does_not_create_direction_persistence():
+    values = _flat_series(days=60)
+    values[44] = 930.0  # 特殊日的小跌
+    values[45] = 820.0  # 当期暴跌
+    series = _series(values)
+    marked = _mark_special(series, {series[44]["date"]})
+    result = detection.detect_series(marked, "rev")
+    # 特殊日不能充当「方向延续」的前一观测，因此不硬判为异常
+    assert result["hits"] == []
+
+
+def test_special_day_itself_still_uses_real_result_if_it_hits():
+    values = _flat_series(days=60)
+    values[44] = 930.0
+    values[45] = 700.0
+    series = _series(values)
+    marked = _mark_special(series, {series[45]["date"]}, "closed")
+    result = detection.detect_series(marked, "rev")
+    assert len(result["hits"]) == 1
+    hit = result["hits"][0]
+    # 当期观测是真实经营结果：不清零、不平滑
+    assert hit["observed"] == 700.0
+    assert hit["current_triple"]["revenue"] == 700.0
+    assert hit["special_day"] is True
+
+
+def test_single_special_day_does_not_create_persistence():
+    values = _flat_series(days=60)
+    values[45] = 700.0  # 单日暴跌
+    series = _series(values)
+    marked = _mark_special(series, {series[45]["date"]})
+    result = detection.detect_series(marked, "rev")
+    assert result["hits"] == []

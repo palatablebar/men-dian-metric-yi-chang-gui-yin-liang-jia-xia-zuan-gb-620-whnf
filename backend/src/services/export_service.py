@@ -8,7 +8,9 @@ from src.constants.enums import (
     CHANNEL_LABELS,
     DIRECTION_LABELS,
     METRIC_LABELS,
+    REPORT_INVALIDATION_LABELS,
     REPORT_KIND_LABELS,
+    REPORT_STATUS_LABELS,
     REVIEW_STATUS_LABELS,
     SEVERITY_LABELS,
 )
@@ -20,7 +22,7 @@ from src.utils.csv_export import to_csv
 
 
 def anomalies_csv(db: Session, store_id: int | None = None, severity: str | None = None) -> bytes:
-    stmt = select(Anomaly)
+    stmt = select(Anomaly).where(Anomaly.invalidated.is_(False))
     if store_id:
         stmt = stmt.where(Anomaly.store_id == store_id)
     if severity:
@@ -30,10 +32,13 @@ def anomalies_csv(db: Session, store_id: int | None = None, severity: str | None
     headers = [
         "门店编码", "门店", "区域", "指标日期", "指标", "观测值", "稳健基线", "MAD",
         "稳健z", "方向", "严重度", "影响金额(元)", "处理状态", "复核人", "复核备注",
+        "纳入基线天数", "基线样本起", "基线样本止", "日历版本", "排除的特殊日",
     ]
     body = []
     for row in rows:
         store = stores.get(row.store_id)
+        payload = row.payload or {}
+        excluded = ",".join(item.get("date", "") for item in payload.get("excluded_special_days", []))
         body.append(
             [
                 store.code if store else "",
@@ -51,6 +56,11 @@ def anomalies_csv(db: Session, store_id: int | None = None, severity: str | None
                 REVIEW_STATUS_LABELS.get(row.status, row.status),
                 row.reviewer or "",
                 row.review_note or "",
+                payload.get("window_samples", ""),
+                payload.get("window_start", ""),
+                payload.get("window_end", ""),
+                row.calendar_version,
+                excluded,
             ]
         )
     return to_csv(headers, body)
@@ -63,11 +73,14 @@ def attributions_csv(db: Session) -> bytes:
     headers = [
         "门店编码", "门店", "指标日期", "指标", "方法", "基线营收", "当期营收", "总变动",
         "ADR 贡献", "OCC 贡献", "ROOMS 贡献", "ADR 占比", "OCC 占比", "ROOMS 占比", "残差", "结论",
+        "样本起", "样本止", "样本天数", "样本指纹", "日历版本",
     ]
     body = []
     for row in rows:
         anomaly = anomalies.get(row.anomaly_id)
         store = stores.get(row.store_id)
+        drivers = row.drivers or {}
+        window_dates = drivers.get("window_dates") or []
         body.append(
             [
                 store.code if store else "",
@@ -86,6 +99,11 @@ def attributions_csv(db: Session) -> bytes:
                 "" if row.rooms_share is None else f"{row.rooms_share:.4f}",
                 f"{row.residual:.4f}",
                 row.narrative,
+                window_dates[0] if window_dates else "",
+                window_dates[-1] if window_dates else "",
+                len(window_dates),
+                row.sample_key,
+                row.calendar_version,
             ]
         )
     return to_csv(headers, body)
@@ -103,9 +121,18 @@ def report_csv(db: Session, report: Report) -> bytes:
         ["生成人", report.generated_by],
         ["数据窗口", f"{snapshot.get('data_window', {}).get('start', '')} ~ {snapshot.get('data_window', {}).get('end', '')}"],
         ["口径", snapshot.get("method", "")],
-        ["", ""],
-        ["严重度", "起数"],
+        ["日历版本", report.calendar_version],
+        ["报告状态", REPORT_STATUS_LABELS.get(report.status, report.status)],
     ]
+    if report.invalidated:
+        rows.append(["失效提示", REPORT_INVALIDATION_LABELS.get(report.invalidated_reason or "", "规则已变更，待重算")])
+    calendar = snapshot.get("calendar") or {}
+    if calendar:
+        rows.append(["纳入基线天数", calendar.get("included_day_count", "")])
+        rows.append(["排除特殊日天数", calendar.get("excluded_day_count", "")])
+        rows.append(["排除日期", ",".join(calendar.get("excluded_dates") or [])])
+    rows.append(["", ""])
+    rows.append(["严重度", "起数"])
     for item in snapshot.get("severity", []):
         rows.append([item.get("label", ""), item.get("count", 0)])
     rows.append(["", ""])

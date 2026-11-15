@@ -90,3 +90,46 @@ def test_dataset_is_deterministic():
     assert first["meta"] == second["meta"]
     assert first["events"] == second["events"]
     assert first["points"][:50] == second["points"][:50]
+
+
+def test_seed_calendar_does_not_change_planned_events():
+    """运营日历预置规则只改变可比样本，不改变 37 起预置异常的起数。"""
+    from datetime import date, timedelta
+
+    from scripts.demo_config import SEED_CALENDAR
+
+    data = dataset()
+    special: dict[str, set[str]] = {}
+    for rule in SEED_CALENDAR:
+        cursor = date.fromisoformat(rule["start_date"])
+        last = date.fromisoformat(rule["end_date"])
+        while cursor <= last:
+            special.setdefault(rule["store_code"], set()).add(cursor.isoformat())
+            cursor += timedelta(days=1)
+
+    found = set()
+    for store in {point["store_code"] for point in data["points"]}:
+        series = [
+            {**row, "is_special": row["date"] in special.get(store, set())}
+            for row in aggregate_series(data["points"], store)
+        ]
+        result = detection.detect_series(series, "rev")
+        hit_days = {hit["date"] for hit in result["hits"]}
+        for hit in result["hits"]:
+            found.add((store, hit["date"]))
+        # 特殊日不进基线：命中日不得是特殊日；样本里也不得混入特殊日
+        assert not (hit_days & special.get(store, set()))
+        for hit in result["hits"]:
+            assert not (set(hit["window_dates"]) & special.get(store, set()))
+    planned = {(item["store_code"], item["metric_date"]) for item in data["events"]}
+    assert found == planned
+
+
+def test_seed_calendar_rules_do_not_land_on_event_days():
+    from scripts.demo_config import SEED_CALENDAR
+
+    data = dataset()
+    event_days = {(item["store_code"], item["metric_date"]) for item in data["events"]}
+    for rule in SEED_CALENDAR:
+        start = rule["start_date"]
+        assert (rule["store_code"], start) not in event_days

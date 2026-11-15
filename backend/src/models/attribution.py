@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.models import Base
@@ -32,4 +32,7 @@ class Attribution(Base):
     drivers: Mapped[dict] = mapped_column(JSON, default=dict)
     dimensions: Mapped[dict] = mapped_column(JSON, default=dict)
     narrative: Mapped[str] = mapped_column(Text, default="")
+    calendar_version: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    sample_key: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)

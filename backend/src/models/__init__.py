@@ -10,10 +10,12 @@ from src.models.user import User  # noqa: E402
 from src.models.audit import AuditLog  # noqa: E402
 from src.models.store import Store  # noqa: E402
 from src.models.metric import MetricPoint  # noqa: E402
+from src.models.calendar import CalendarRevision, OperatingCalendar  # noqa: E402
 from src.models.run import Run  # noqa: E402
 from src.models.anomaly import Anomaly  # noqa: E402
 from src.models.attribution import Attribution  # noqa: E402
 from src.models.report import Report  # noqa: E402
+from src.models.generation import GenerationJob  # noqa: E402
 
 __all__ = [
     "Base",
@@ -21,8 +23,11 @@ __all__ = [
     "AuditLog",
     "Store",
     "MetricPoint",
+    "OperatingCalendar",
+    "CalendarRevision",
     "Run",
     "Anomaly",
     "Attribution",
     "Report",
+    "GenerationJob",
 ]

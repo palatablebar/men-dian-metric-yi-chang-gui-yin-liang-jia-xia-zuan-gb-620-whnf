@@ -150,6 +150,35 @@ class ReportStatus(StrEnum):
 REPORT_STATUS_LABELS: dict[str, str] = {ReportStatus.DRAFT.value: "草稿", ReportStatus.PUBLISHED.value: "已发布"}
 
 
+class CalendarDayType(StrEnum):
+    """运营日历特殊日类型：均不进入常态基线。"""
+
+    PROMO = "promo"          # 大促日
+    RENOVATING = "renovating"  # 停业改造
+    CLOSED = "closed"        # 临时闭店
+
+
+CALENDAR_DAY_TYPE_LABELS: dict[str, str] = {
+    CalendarDayType.PROMO.value: "大促日",
+    CalendarDayType.RENOVATING.value: "停业改造",
+    CalendarDayType.CLOSED.value: "临时闭店",
+}
+
+CALENDAR_DAY_TYPE_ORDER: list[str] = [
+    CalendarDayType.PROMO.value,
+    CalendarDayType.RENOVATING.value,
+    CalendarDayType.CLOSED.value,
+]
+
+# 特殊日当天不做常态异常判定，但真实经营结果仍会进入当期说明
+CALENDAR_EXCLUSION_NOTE = "特殊日不进入常态基线；当期观测仍按真实经营结果保留"
+
+REPORT_INVALIDATION_LABELS: dict[str, str] = {
+    "calendar_changed": "日历规则已变更，待重算",
+    "calendar_changed_reviewed": "已复核，日历变更后待核对",
+}
+
+
 # 算法 A 默认参数（detection.DEFAULTS 的对外镜像，前端只展示不计算）
 DETECTION_DEFAULTS: dict[str, float | int | bool] = {
     "window": 28,

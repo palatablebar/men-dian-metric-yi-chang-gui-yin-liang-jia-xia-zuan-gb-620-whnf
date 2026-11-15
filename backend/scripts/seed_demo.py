@@ -32,6 +32,7 @@ from scripts.demo_config import (
     DEMO_PASSWORD,
     DEMO_USERS,
     ORG,
+    SEED_CALENDAR,
     SEED_REPORT,
     SEED_REVIEWS,
     SEED_RUN,
@@ -127,6 +128,64 @@ def ensure_attributions(db) -> int:
     return db.scalar(select(func.count()).select_from(Attribution)) or 0
 
 
+def ensure_calendar(db, stores: dict[str, Store]) -> int:
+    """幂等写入运营日历：每条规则一个 seed_key，重复执行不新增、不产生新版本。"""
+    from src.models.calendar import CalendarRevision, OperatingCalendar
+
+    created = 0
+    for spec in SEED_CALENDAR:
+        if db.scalar(select(OperatingCalendar).where(OperatingCalendar.seed_key == spec["seed_key"])) is not None:
+            continue
+        if db.scalar(select(CalendarRevision).where(CalendarRevision.seed_key == f"{spec['seed_key']}-rev")) is not None:
+            continue
+        store = stores.get(spec["store_code"])
+        if store is None:
+            continue
+        version = (db.scalar(select(func.max(CalendarRevision.version))) or 0) + 1
+        rule = OperatingCalendar(
+            store_id=store.id,
+            day_type=spec["day_type"],
+            start_date=date.fromisoformat(spec["start_date"]),
+            end_date=date.fromisoformat(spec["end_date"]),
+            label=spec["label"],
+            note=spec["note"] or None,
+            active=True,
+            calendar_version=version,
+            created_by="admin@anomalyattr.io",
+            seed_key=spec["seed_key"],
+        )
+        db.add(rule)
+        db.flush()
+        db.add(
+            CalendarRevision(
+                version=version,
+                action="create",
+                actor_email="admin@anomalyattr.io",
+                summary=f"预置特殊日：{store.name} {spec['start_date']}~{spec['end_date']} {spec['label']}",
+                scope={
+                    "kind": "rule",
+                    "rule_ids": [rule.id],
+                    "store_ids": [store.id],
+                    "ranges": [
+                        {
+                            "store_id": store.id,
+                            "store_code": store.code,
+                            "day_type": spec["day_type"],
+                            "start_date": spec["start_date"],
+                            "end_date": spec["end_date"],
+                            "days": (rule.end_date - rule.start_date).days + 1,
+                        }
+                    ],
+                    "dates": [],
+                },
+                seed_key=f"{spec['seed_key']}-rev",
+            )
+        )
+        db.flush()
+        created += 1
+    return created
+
+
 def ensure_reviews(db) -> None:
     stores = {store.code: store for store in db.scalars(select(Store)).all()}
     for code, metric_date, status, note in SEED_REVIEWS:
@@ -200,6 +259,7 @@ def seed_all() -> dict:
         users = ensure_users(db)
         stores = ensure_stores(db, dataset["stores"])
         ensure_metrics(db, dataset["stores"], stores, dataset["points"])
+        ensure_calendar(db, stores)
         run = ensure_run(db)
         ensure_attributions(db)
         ensure_reviews(db)

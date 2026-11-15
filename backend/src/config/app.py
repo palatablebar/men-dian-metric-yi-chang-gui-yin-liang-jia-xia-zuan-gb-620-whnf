@@ -23,6 +23,49 @@ def _bootstrap_database() -> None:
 
     wait_for_db()
     Base.metadata.create_all(bind=engine)
+    _ensure_added_columns()
+
+
+# create_all 不会给已有表补列；升级旧数据卷时用轻量补列保证向后兼容。
+_ADDED_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "runs": [("calendar_version", "INTEGER NOT NULL DEFAULT 0")],
+    "anomalies": [
+        ("calendar_version", "INTEGER NOT NULL DEFAULT 0"),
+        ("invalidated", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("invalidated_reason", "VARCHAR(60) NULL"),
+        ("invalidated_by_version", "INTEGER NULL"),
+    ],
+    "attributions": [
+        ("calendar_version", "INTEGER NOT NULL DEFAULT 0"),
+        ("sample_key", "VARCHAR(64) NOT NULL DEFAULT ''"),
+        ("updated_at", "DATETIME NULL"),
+    ],
+    "reports": [
+        ("calendar_version", "INTEGER NOT NULL DEFAULT 0"),
+        ("invalidated", "BOOLEAN NOT NULL DEFAULT 0"),
+        ("invalidated_reason", "VARCHAR(60) NULL"),
+        ("invalidated_by_version", "INTEGER NULL"),
+        ("superseded_by", "INTEGER NULL"),
+    ],
+}
+
+
+def _ensure_added_columns() -> None:
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        with engine.begin() as conn:
+            for table, columns in _ADDED_COLUMNS.items():
+                if table not in existing_tables:
+                    continue
+                present = {column["name"] for column in inspector.get_columns(table)}
+                for name, ddl in columns:
+                    if name not in present:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+    except Exception as exc:  # noqa: BLE001 - 补列失败不应阻塞启动（新库无需补列）
+        logger.warning("[BOOTSTRAP] ensure columns skipped: %s", exc)
 
 
 def _run_seed_once() -> None:
